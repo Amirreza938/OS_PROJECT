@@ -14,7 +14,7 @@ struct product {
 // Function to read a file and parse its content into a struct product
 struct product read_file(const char *filepath) {
     struct product p;
-    p.Name = malloc(256); // Allocate memory for Name
+    p.Name = (char*)malloc(256); // Allocate memory for Name
 
     FILE *file = fopen(filepath, "r");
     if (file == NULL) {
@@ -49,7 +49,7 @@ void free_product(struct product *p) {
     }
 }
 
-/*int main() {
+int main() {
     const char *file_path = "E:/Operating System/project/OS_PROJECT/Data_set/Store1/Sports/649.txt"; // Replace with actual file path
 
     struct product p = read_file(file_path);
@@ -63,4 +63,4 @@ void free_product(struct product *p) {
 
     free_product(&p); // Free allocated memory for product name
     return 0;
-}*/
+}
