@@ -2,56 +2,45 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <string.h>
 
 // Structure to hold product order data
 struct order {
-    char *product_name;
+    char product_name[100];
     int quantity;
-    float price;
 };
 
-// Function to process each order (thread handler)
-void* process_order(void* arg) {
-    struct order *ord = (struct order*)arg;
-    printf("PID %d create thread for Order: %s, Quantity: %d, Price: %.2f\n", getpid(), ord->product_name, ord->quantity, ord->price);
+// Function to process orders in a thread
+void* process_orders(void* arg) {
+    struct order* orders = (struct order*)arg;
+    printf("PID %d create thread for Orders TID: %lu\n", getpid(), pthread_self());
+    for (int i = 0; i < 3; i++) {  // Example assumes 3 orders
+        printf("PID %d create thread for Order: %s %d\n", getpid(), orders[i].product_name, orders[i].quantity);
+    }
     return NULL;
 }
 
-// Function to simulate processing categories under stores
-void process_category(const char* store_name, const char* category_name, struct order* orders, int order_count) {
-    printf("PID %d create child for Category %s under Store %s\n", getpid(), category_name, store_name);
-
-    pthread_t *threads = (pthread_t*)malloc(order_count * sizeof(pthread_t));
-
-    // Create threads for orders in the category
-    for (int i = 0; i < order_count; i++) {
-        printf("PID %d create thread for Order %d in %s\n", getpid(), i + 1, category_name);
-        pthread_create(&threads[i], NULL, process_order, (void*)&orders[i]);
-    }
-
-    // Wait for all threads to finish (not using wait() here)
-    for (int i = 0; i < order_count; i++) {
-        pthread_join(threads[i], NULL);
-    }
-
-    free(threads);
+// Function to handle categories within a store
+void process_category(const char* category_name, int store_pid) {
+    printf("PID %d create child for %s PID: %d\n", store_pid, category_name, getpid());
 }
 
-// Function to simulate creating stores and processing categories
-void process_store(const char* store_name, struct order* orders, int order_count) {
-    printf("PID %d create child for Store %s\n", getpid(), store_name);
+// Function to handle a store
+void process_store(const char* store_name, struct order* orders, int store_pid) {
+    printf("PID %d create child for %s PID: %d\n", store_pid, store_name, getpid());
 
-    // Create child processes for categories in the store
-    char* categories[] = {"Digital", "Home", "Apparel", "Food", "Market", "Toys", "Beauty", "Sports"};
+    // List of categories
+    const char* categories[] = {"Digital", "Home", "Apparel", "Food", "Market", "Toys", "Beauty", "Sports"};
+    int num_categories = sizeof(categories) / sizeof(categories[0]);
 
-    for (int i = 0; i < 8; i++) {
+    // Create a process for each category
+    for (int i = 0; i < num_categories; i++) {
         pid_t pid = fork();
-        if (pid == 0) {  // Child process
-            process_category(store_name, categories[i], orders, order_count);
-            exit(0);  // Exit the child process after processing the category
+        if (pid == 0) {  // Child process for categories
+            process_category(categories[i], getppid());
+            exit(0);
         } else if (pid > 0) {
-            // Parent process continues to create more child processes for categories
-            printf("PID %d create child for Category %s under Store %s\n", getpid(), categories[i], store_name);
+            wait(NULL);  // Wait for the category process to finish
         } else {
             perror("fork failed");
             exit(1);
@@ -62,78 +51,50 @@ void process_store(const char* store_name, struct order* orders, int order_count
 // Main function
 int main() {
     char username[50];
-    int order_count;
+    int order_count = 3;  // Fixed for the example
     float price_threshold;
 
-    // Get user input for username
+    // Input: Username
     printf("Username: ");
-    scanf("%s", username);
+    scanf("%49s", username);
 
-    // Get user input for order list
-    printf("Orderlist0:\n");
-    printf("Enter the number of orders: ");
-    scanf("%d", &order_count);
-
-    struct order* orders = (struct order*)malloc(order_count * sizeof(struct order));
-
-    // Get orders input
+    // Input: Orders
+    struct order orders[3];
+    printf("OrderList0:\n");
     for (int i = 0; i < order_count; i++) {
-        orders[i].product_name = (char*)malloc(100 * sizeof(char));
-
-        // Get the product name and quantity
-        printf("Enter product name for order %d: ", i + 1);
-        getchar(); // to clear the newline
-        fgets(orders[i].product_name, 100, stdin);
-        orders[i].product_name[strcspn(orders[i].product_name, "\n")] = 0;  // Remove trailing newline
-
-        printf("Enter quantity for order %d: ", i + 1);
-        scanf("%d", &orders[i].quantity);
-
-        printf("Enter price for order %d: ", i + 1);
-        scanf("%f", &orders[i].price);
+        scanf("%s %d", orders[i].product_name, &orders[i].quantity);
     }
 
-    // Get price threshold input
+    // Input: Price threshold
     printf("Price threshold: ");
     scanf("%f", &price_threshold);
 
-    printf("\nUser: %s\n", username);
+    printf("\n%s create PID: %d\n", username, getpid());
 
-    // First, create threads for the orders
-    pthread_t *threads = (pthread_t*)malloc(order_count * sizeof(pthread_t));
-    for (int i = 0; i < order_count; i++) {
-        printf("PID %d create thread for Order %d\n", getpid(), i + 1);
-        pthread_create(&threads[i], NULL, process_order, (void*)&orders[i]);
+    // Create a thread for orders
+    pthread_t order_thread;
+    if (pthread_create(&order_thread, NULL, process_orders, (void*)orders) != 0) {
+        perror("Failed to create thread");
+        exit(1);
     }
+    pthread_join(order_thread, NULL);  // Wait for the orders thread to finish
 
-    // Wait for all threads to finish
-    for (int i = 0; i < order_count; i++) {
-        pthread_join(threads[i], NULL);
-    }
+    // Create child processes for each store
+    const char* stores[] = {"Store1", "Store2", "Store3"};
+    int num_stores = sizeof(stores) / sizeof(stores[0]);
 
-    // After threads are done, now create child processes for stores
-    char* stores[] = {"Store1", "Store2", "Store3"};
-
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < num_stores; i++) {
         pid_t pid = fork();
-        if (pid == 0) {  // Child process
-            process_store(stores[i], orders, order_count);
-            exit(0);  // Exit the child process after processing the store
+        if (pid == 0) {  // Child process for store
+            process_store(stores[i], orders, getppid());
+            exit(0);
         } else if (pid > 0) {
-            // Parent process continues to create more child processes for stores
-            printf("PID %d create child for Store %s\n", getpid(), stores[i]);
+            wait(NULL);  // Wait for the store process to finish
         } else {
             perror("fork failed");
             exit(1);
         }
     }
-
-    // Clean up dynamically allocated memory
-    for (int i = 0; i < order_count; i++) {
-        free(orders[i].product_name);
-    }
-    free(orders);
-    free(threads);
 
     return 0;
 }
