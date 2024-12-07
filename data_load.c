@@ -4,38 +4,36 @@
 #include <dirent.h>
 #include <sys/stat.h>
 
-// Structure to hold product data
+#define MAX_STORES 3 // Number of stores
+
+// Structure definitions remain unchanged
 struct product {
-    char *Name;
+    char Name[256];
     float Price;
     float Score;
     int Entity;
-    char LastModified[64]; // Field to store last modified date and time
+    char LastModified[64];
 };
 
-// Structure to hold category data
 struct category {
-    char *Name;
-    struct product *Products;  // Array of products in the category
+    char Name[256];
+    struct product *Products;
     int ProductCount;
 };
 
-// Structure to hold store data
 struct store {
-    char *Name;
-    struct category *Categories;  // Array of categories in the store
+    char Name[256];
+    struct category *Categories;
     int CategoryCount;
 };
 
 // Function to read a file and parse its content into a product
 struct product read_file(const char *filepath) {
     struct product p;
-    p.Name = (char*)malloc(256); // Allocate memory for Name
-
     FILE *file = fopen(filepath, "r");
-    if (file == NULL) {
+    if (!file) {
         perror("Error opening file");
-        exit(EXIT_FAILURE); // Exit on file open failure
+        exit(EXIT_FAILURE);
     }
 
     char buffer[256];
@@ -57,38 +55,33 @@ struct product read_file(const char *filepath) {
     return p;
 }
 
-// Function to extract the name of the directory (category or store)
-char *get_directory_name(const char *dirpath) {
+// Function to extract the directory name
+void get_directory_name(const char *dirpath, char *dest) {
     char *dir_name = strrchr(dirpath, '/');
     if (dir_name) {
-        dir_name++;  // Move past the '/' character
+        dir_name++; // Skip '/'
     } else {
         dir_name = (char *)dirpath;
     }
-    return dir_name;
+    strcpy(dest, dir_name);
 }
 
-// Function to traverse directories and process files (for categories)
+// Function to traverse category directories
 struct category traverse_category(const char *dirpath) {
-    struct category cat;
-    cat.Name = get_directory_name(dirpath); // Extract category name
-    cat.Products = NULL;
-    cat.ProductCount = 0;
+    struct category cat = {0};
+    get_directory_name(dirpath, cat.Name);
 
     struct dirent *entry;
     DIR *dp = opendir(dirpath);
-
-    if (dp == NULL) {
+    if (!dp) {
         perror("Error opening category directory");
         exit(EXIT_FAILURE);
     }
 
     while ((entry = readdir(dp)) != NULL) {
-        // Skip "." and ".."
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
 
-        // Construct full file path
         char filepath[1024];
         snprintf(filepath, sizeof(filepath), "%s/%s", dirpath, entry->d_name);
 
@@ -96,7 +89,6 @@ struct category traverse_category(const char *dirpath) {
         stat(filepath, &path_stat);
 
         if (S_ISREG(path_stat.st_mode)) {
-            // Process as product file
             cat.Products = realloc(cat.Products, sizeof(struct product) * (cat.ProductCount + 1));
             cat.Products[cat.ProductCount] = read_file(filepath);
             cat.ProductCount++;
@@ -107,27 +99,22 @@ struct category traverse_category(const char *dirpath) {
     return cat;
 }
 
-// Function to traverse directories and process files (for stores)
+// Function to traverse store directories
 struct store traverse_store(const char *dirpath) {
-    struct store s;
-    s.Name = get_directory_name(dirpath); // Extract store name
-    s.Categories = NULL;
-    s.CategoryCount = 0;
+    struct store s = {0};
+    get_directory_name(dirpath, s.Name);
 
     struct dirent *entry;
     DIR *dp = opendir(dirpath);
-
-    if (dp == NULL) {
+    if (!dp) {
         perror("Error opening store directory");
         exit(EXIT_FAILURE);
     }
 
     while ((entry = readdir(dp)) != NULL) {
-        // Skip "." and ".."
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
 
-        // Construct full category path
         char subdirpath[1024];
         snprintf(subdirpath, sizeof(subdirpath), "%s/%s", dirpath, entry->d_name);
 
@@ -135,7 +122,6 @@ struct store traverse_store(const char *dirpath) {
         stat(subdirpath, &path_stat);
 
         if (S_ISDIR(path_stat.st_mode)) {
-            // Process as category directory
             s.Categories = realloc(s.Categories, sizeof(struct category) * (s.CategoryCount + 1));
             s.Categories[s.CategoryCount] = traverse_category(subdirpath);
             s.CategoryCount++;
@@ -146,52 +132,54 @@ struct store traverse_store(const char *dirpath) {
     return s;
 }
 
-int main() {
-    const char *root_path = "./Data_set"; // Root directory for the dataset
-
+// Function to get all stores (fixed-size array)
+void get_stores(const char *root_path, struct store stores[MAX_STORES]) {
     struct dirent *entry;
     DIR *dp = opendir(root_path);
-
-    if (dp == NULL) {
+    if (!dp) {
         perror("Error opening root directory");
         exit(EXIT_FAILURE);
     }
 
-    printf("Dataset Structure:\n");
-
+    int i = 0;
     while ((entry = readdir(dp)) != NULL) {
-        // Skip "." and ".."
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
 
-        // Construct full store path
         char store_path[1024];
         snprintf(store_path, sizeof(store_path), "%s/%s", root_path, entry->d_name);
 
         struct stat path_stat;
         stat(store_path, &path_stat);
 
-        if (S_ISDIR(path_stat.st_mode)) {
-            // Process as store directory
-            struct store s = traverse_store(store_path);
-
-            printf("Store: %s\n", s.Name);
-            for (int i = 0; i < s.CategoryCount; i++) {
-                struct category *cat = &s.Categories[i];
-                printf("  Category: %s\n", cat->Name);
-                for (int j = 0; j < cat->ProductCount; j++) {
-                    struct product *p = &cat->Products[j];
-                    printf("    Product: %s\n", p->Name);
-                    printf("      Price: %.2f\n", p->Price);
-                    printf("      Score: %.2f\n", p->Score);
-                    printf("      Entity: %d\n", p->Entity);
-                    printf("      Last Modified: %s\n", p->LastModified);
-                }
-            }
-            free(s.Categories); // Free allocated memory
+        if (S_ISDIR(path_stat.st_mode) && i < MAX_STORES) {
+            stores[i] = traverse_store(store_path);
+            i++;
         }
     }
 
     closedir(dp);
-    return 0;
 }
+
+// int main() {
+//     const char *root_path = "./Data_set";
+//     struct store stores[MAX_STORES] = {0};
+
+//     get_stores(root_path, stores);
+
+//     for (int i = 0; i < MAX_STORES; i++) {
+//         printf("Store %d: %s\n", i + 1, stores[i].Name);
+//         printf("%s\n", stores[i].Categories[0].Name);
+//         printf("%d\n", stores[i].Categories[0].Products[0].Entity);
+//     }
+
+//     // Free dynamically allocated memory
+//     for (int i = 0; i < MAX_STORES; i++) {
+//         for (int j = 0; j < stores[i].CategoryCount; j++) {
+//             free(stores[i].Categories[j].Products);
+//         }
+//         free(stores[i].Categories);
+//     }
+
+//     return 0;
+// }
