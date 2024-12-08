@@ -1,12 +1,13 @@
+#ifndef DATASET_LOADER_H
+#define DATASET_LOADER_H
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
 #include <sys/stat.h>
 
-#define MAX_STORES 3 // Number of stores
-
-// Structure definitions remain unchanged
+// Structure definitions
 struct product {
     char Name[256];
     float Price;
@@ -20,16 +21,19 @@ struct category {
     struct product *Products;
     int ProductCount;
 };
-
 struct store {
     char Name[256];
     struct category *Categories;
     int CategoryCount;
 };
+struct order {
+    char product_name[100];
+    int quantity;
+};
 
 // Function to read a file and parse its content into a product
 struct product read_file(const char *filepath) {
-    struct product p;
+    struct product p = {0};
     FILE *file = fopen(filepath, "r");
     if (!file) {
         perror("Error opening file");
@@ -57,13 +61,13 @@ struct product read_file(const char *filepath) {
 
 // Function to extract the directory name
 void get_directory_name(const char *dirpath, char *dest) {
-    char *dir_name = strrchr(dirpath, '/');
+    const char *dir_name = strrchr(dirpath, '/');  // strrchr returns const char*
     if (dir_name) {
-        dir_name++; // Skip '/'
+        dir_name++;  // Skip '/'
     } else {
-        dir_name = (char *)dirpath;
+        dir_name = dirpath;
     }
-    strcpy(dest, dir_name);
+    strcpy(dest, dir_name);  // Copy the string into dest
 }
 
 // Function to traverse category directories
@@ -89,7 +93,7 @@ struct category traverse_category(const char *dirpath) {
         stat(filepath, &path_stat);
 
         if (S_ISREG(path_stat.st_mode)) {
-            cat.Products = realloc(cat.Products, sizeof(struct product) * (cat.ProductCount + 1));
+            cat.Products = (struct product*)realloc(cat.Products, sizeof(struct product) * (cat.ProductCount + 1));
             cat.Products[cat.ProductCount] = read_file(filepath);
             cat.ProductCount++;
         }
@@ -122,7 +126,7 @@ struct store traverse_store(const char *dirpath) {
         stat(subdirpath, &path_stat);
 
         if (S_ISDIR(path_stat.st_mode)) {
-            s.Categories = realloc(s.Categories, sizeof(struct category) * (s.CategoryCount + 1));
+            s.Categories = (struct category*)realloc(s.Categories, sizeof(struct category) * (s.CategoryCount + 1));
             s.Categories[s.CategoryCount] = traverse_category(subdirpath);
             s.CategoryCount++;
         }
@@ -132,8 +136,8 @@ struct store traverse_store(const char *dirpath) {
     return s;
 }
 
-// Function to get all stores (fixed-size array)
-void get_stores(const char *root_path, struct store stores[MAX_STORES]) {
+// Function to get all stores
+void get_stores(const char *root_path, struct store **stores, int *store_count) {
     struct dirent *entry;
     DIR *dp = opendir(root_path);
     if (!dp) {
@@ -141,7 +145,9 @@ void get_stores(const char *root_path, struct store stores[MAX_STORES]) {
         exit(EXIT_FAILURE);
     }
 
-    int i = 0;
+    *store_count = 0;
+    *stores = NULL;
+
     while ((entry = readdir(dp)) != NULL) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
@@ -152,34 +158,14 @@ void get_stores(const char *root_path, struct store stores[MAX_STORES]) {
         struct stat path_stat;
         stat(store_path, &path_stat);
 
-        if (S_ISDIR(path_stat.st_mode) && i < MAX_STORES) {
-            stores[i] = traverse_store(store_path);
-            i++;
+        if (S_ISDIR(path_stat.st_mode)) {
+            *stores = (struct store*)realloc(*stores, sizeof(struct store) * (*store_count + 1));
+            (*stores)[*store_count] = traverse_store(store_path);
+            (*store_count)++;
         }
     }
 
     closedir(dp);
 }
 
-// int main() {
-//     const char *root_path = "./Data_set";
-//     struct store stores[MAX_STORES] = {0};
-
-//     get_stores(root_path, stores);
-
-//     for (int i = 0; i < MAX_STORES; i++) {
-//         printf("Store %d: %s\n", i + 1, stores[i].Name);
-//         printf("%s\n", stores[i].Categories[0].Name);
-//         printf("%d\n", stores[i].Categories[0].Products[0].Entity);
-//     }
-
-//     // Free dynamically allocated memory
-//     for (int i = 0; i < MAX_STORES; i++) {
-//         for (int j = 0; j < stores[i].CategoryCount; j++) {
-//             free(stores[i].Categories[j].Products);
-//         }
-//         free(stores[i].Categories);
-//     }
-
-//     return 0;
-// }
+#endif  // DATASET_LOADER_H
