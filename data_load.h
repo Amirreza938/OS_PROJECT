@@ -14,6 +14,7 @@ struct product {
     float Score;
     int Entity;
     char LastModified[64];
+    int id;
 };
 
 struct category {
@@ -31,6 +32,18 @@ struct order {
     int quantity;
 };
 
+struct buyBox
+{
+    struct order* Orders;
+    int OrderCount;
+};
+
+struct sellBox
+{
+    struct product* products;
+    int ProductCount;
+};
+
 // Function to read a file and parse its content into a product
 struct product read_file(const char *filepath) {
     struct product p = {0};
@@ -40,6 +53,29 @@ struct product read_file(const char *filepath) {
         exit(EXIT_FAILURE);
     }
 
+    // Extract the file name without the path
+    const char *filename = strrchr(filepath, '/');  // Find the last '/' in the filepath
+    if (!filename) {
+        filename = filepath;  // If no '/' is found, filename is the entire filepath
+    } else {
+        filename++;  // Skip the '/'
+    }
+
+    // Remove the ".txt" extension from the filename
+    char filename_noext[256];
+    strncpy(filename_noext, filename, sizeof(filename_noext) - 1);
+    filename_noext[sizeof(filename_noext) - 1] = '\0';
+
+    // Find the position of the ".txt" extension and replace it with a null character
+    char *dot_pos = strrchr(filename_noext, '.');
+    if (dot_pos) {
+        *dot_pos = '\0';
+    }
+
+    // Assign the file name (converted to an integer) as the product's ID
+    sscanf(filename_noext, "%d", &p.id);
+
+    // Parse the file contents for other product fields
     char buffer[256];
     while (fgets(buffer, sizeof(buffer), file)) {
         if (strncmp(buffer, "Name:", 5) == 0) {
