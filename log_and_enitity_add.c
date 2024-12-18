@@ -6,7 +6,7 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 #include "data_load.h"
-#include <sys/mman.h> // For shm_open and mmap
+#include <sys/mman.h> 
 #include <fcntl.h>
 #include <semaphore.h>
 #include <time.h>
@@ -30,7 +30,6 @@ void get_current_time(char *buffer, size_t size)
     struct tm *tm_info = localtime(&now);
     strftime(buffer, size, "%Y-%m-%d %H:%M:%S", tm_info);
 }
-// Mutex for thread-safe logging
 pthread_mutex_t log_mutex;
 
 int get_max_order_number(const char *storeName, const char *categoryName, const char *username)
@@ -84,18 +83,18 @@ int get_max_order_number(const char *storeName, const char *categoryName, const 
 
 void write_log(const char *username, const char *message , const char * storeName , const char * categoryName)
 {
-    // Create the log file name based on the username
+    
     char log_filename[100];
     
     snprintf(log_filename, sizeof(log_filename), "./Data_set/%s/%s/%s_Order%d.log",storeName , categoryName, username,max_order);
 
-    // Mutex for thread-safe logging
-    pthread_mutex_lock(&log_mutex); // Lock the mutex for thread safety
+    
+    pthread_mutex_lock(&log_mutex);
 
     FILE *log_file = fopen(log_filename, "a");
     if (log_file != NULL)
     {
-        // Write log message with timestamp
+        
         char time_buffer[64];
         get_current_time(time_buffer, sizeof(time_buffer));
         fprintf(log_file, "[%s] %s\n", time_buffer, message);
@@ -106,14 +105,14 @@ void write_log(const char *username, const char *message , const char * storeNam
         perror("Error opening log file");
     }
 
-    pthread_mutex_unlock(&log_mutex); // Unlock the mutex
+    pthread_mutex_unlock(&log_mutex);
 }
 
-// Initialize logging system
+
 void init_logging()
 {
-    pthread_mutex_init(&log_mutex, NULL);       // Initialize the mutex
-    FILE *log_file = fopen("logfile.txt", "w"); // Clear log file at program start
+    pthread_mutex_init(&log_mutex, NULL);       
+    FILE *log_file = fopen("logfile.txt", "w"); 
     if (log_file != NULL)
     {
         fclose(log_file);
@@ -124,18 +123,18 @@ void init_logging()
     }
 }
 
-// Clean up logging system
+
 void cleanup_logging()
 {
-    pthread_mutex_destroy(&log_mutex); // Destroy the mutex
+    pthread_mutex_destroy(&log_mutex); 
 }
 void decrease_entity_count(const char *store_name, const char *category_name, int product_id, int quantity)
 {
-    // Construct the file path
+    
     char file_path[512];
     snprintf(file_path, sizeof(file_path), "./Data_set/%s/%s/%d.txt", store_name, category_name, product_id);
 
-    // Open the file for reading and writing
+    
     FILE *file = fopen(file_path, "r+");
     if (file == NULL)
     {
@@ -147,7 +146,7 @@ void decrease_entity_count(const char *store_name, const char *category_name, in
     char line[256];
     int entity_found = 0;
 
-    // Read product details
+    
     while (fgets(line, sizeof(line), file))
     {
         if (sscanf(line, "Name: %[^\n]", prod.Name) == 1)
@@ -165,7 +164,7 @@ void decrease_entity_count(const char *store_name, const char *category_name, in
             continue;
     }
 
-    // Ensure "Entity" field is found in the file
+    
     if (!entity_found)
     {
         printf("Entity count not found in the file.\n");
@@ -173,7 +172,7 @@ void decrease_entity_count(const char *store_name, const char *category_name, in
         return;
     }
 
-    // Check if enough entities are available
+    
     if (prod.Entity < quantity)
     {
         printf("Not enough entities available. Current: %d, Requested: %d\n", prod.Entity, quantity);
@@ -181,14 +180,14 @@ void decrease_entity_count(const char *store_name, const char *category_name, in
         return;
     }
 
-    // Update the entity count and last modified time
+    
     prod.Entity -= quantity;
     get_current_time(prod.LastModified, sizeof(prod.LastModified));
 
-    // Move the file pointer to the beginning of the file for overwriting
+    
     rewind(file);
 
-    // Write updated product details
+    
     fprintf(file, "Name: %s\n", prod.Name);
     fprintf(file, "Price: %.2f\n", prod.Price);
     fprintf(file, "Score: %.1f\n", prod.Score);
@@ -199,15 +198,15 @@ void decrease_entity_count(const char *store_name, const char *category_name, in
 
     fclose(file);
 }
-// Function to process a single product
+
 void *process_product(void *arg)
 {
-    // Unpack parameters
+    
     struct process_params *params = (struct process_params *)arg;
     struct product *prod = params->prod;
     int pipe_fd = params->pipe_fd;
     const char *username = params->username;
-    // Log thread start and file being processed
+    
     char log_message[512];
     snprintf(log_message, sizeof(log_message), "Thread started for file: ./Data_set/%s/%s/%d.txt",
              params->storeName, params->categoryName, prod->id);
@@ -219,19 +218,19 @@ void *process_product(void *arg)
         {
             if (prod->Entity >= params->buyBox.Orders[i].quantity)
             {
-                // Log product found
+                
                 snprintf(log_message, sizeof(log_message), "Thread found product: %s in store: %s, category: %s",
                          prod->Name, params->storeName, params->categoryName);
                 write_log(username, log_message,params->storeName,params->categoryName);
 
-                // Write product details to the pipe
+                
                 write(pipe_fd, prod, sizeof(struct product));
                 break;
             }
         }
     }
 
-    // Free the allocated parameter array
+    
     free(params);
     return NULL;
 }
@@ -255,10 +254,10 @@ struct sellBox getBestBox(int pipe_fd[][2], int store_count, float price_thresho
     float *totalPrices = malloc(store_count * sizeof(float));
     int validStoreCount = 0;
 
-    // Read data from all stores
+    
     for (int i = 0; i < store_count; i++)
     {
-        close(pipe_fd[i][1]); // Close write end
+        close(pipe_fd[i][1]); 
 
         allStoreBoxes[i].ProductCount = 0;
         allStoreBoxes[i].products = malloc(0);
@@ -277,14 +276,14 @@ struct sellBox getBestBox(int pipe_fd[][2], int store_count, float price_thresho
 
         close(pipe_fd[i][0]);
 
-        // Check if this store has all products and is within price threshold
+        
         if (totalPrices[i] <= price_threshold || price_threshold == -1)
         {
             validStoreCount++;
         }
     }
 
-    // Find the best store among valid ones
+    
     float bestScore = -1.0;
     int bestStoreIndex = -1;
 
@@ -301,13 +300,13 @@ struct sellBox getBestBox(int pipe_fd[][2], int store_count, float price_thresho
         }
     }
 
-    // Copy the best store's data
+    
     if (bestStoreIndex != -1)
     {
         userSellBox = allStoreBoxes[bestStoreIndex];
     }
 
-    // Free memory for other stores
+    
     for (int i = 0; i < store_count; i++)
     {
         if (i != bestStoreIndex)
@@ -321,18 +320,18 @@ struct sellBox getBestBox(int pipe_fd[][2], int store_count, float price_thresho
 
     return userSellBox;
 }
-// Function to process a category
+
 void process_category(struct category *cat, struct buyBox UserBuyBox, struct sellBox *StoreSellBox, int store_pid, int pipe_fd, char StoreName[256], const char *username)
 {
 
     max_order = get_max_order_number(StoreName,cat->Name,username);
     if (max_order < 0)
     {
-        max_order = 0; // Default to 0 if no logs found
+        max_order = 0; 
     }
     else
     {
-        max_order++; // Increment for the new order
+        max_order++; 
     }
 
     printf("PID %d create child for category: %s PID: %d\n", store_pid, cat->Name, getpid());
@@ -344,10 +343,10 @@ void process_category(struct category *cat, struct buyBox UserBuyBox, struct sel
         exit(1);
     }
 
-    // Create threads for each product
+    
     for (int i = 0; i < cat->ProductCount; i++)
     {
-        // Allocate memory for parameter array
+        
         struct process_params *params = malloc(sizeof(struct process_params));
         if (!params)
         {
@@ -356,10 +355,10 @@ void process_category(struct category *cat, struct buyBox UserBuyBox, struct sel
             exit(EXIT_FAILURE);
         }
 
-        params->prod = &cat->Products[i]; // Pass pointer to the product
-        params->storeName = StoreName;    // Pass store name
-        params->categoryName = cat->Name; // Pass category name
-        params->pipe_fd = pipe_fd;        // Pass pipe file descriptor
+        params->prod = &cat->Products[i]; 
+        params->storeName = StoreName;    
+        params->categoryName = cat->Name; 
+        params->pipe_fd = pipe_fd;        
         params->buyBox = UserBuyBox;
         params->username = username;
 
@@ -372,7 +371,7 @@ void process_category(struct category *cat, struct buyBox UserBuyBox, struct sel
         }
     }
 
-    // Wait for all threads to complete
+    
     for (int i = 0; i < cat->ProductCount; i++)
     {
         pthread_join(threads[i], NULL);
@@ -381,7 +380,7 @@ void process_category(struct category *cat, struct buyBox UserBuyBox, struct sel
     free(threads);
 }
 
-// Function to handle a store
+
 void process_store(struct store *s, struct buyBox UserBuyBox, struct sellBox *StoreSellBox, int parent_pid, int pipe_fd, const char *username)
 {
     printf("PID %d created child for store: %s\n", parent_pid, s->Name);
@@ -390,7 +389,7 @@ void process_store(struct store *s, struct buyBox UserBuyBox, struct sellBox *St
     {
         pid_t pid = fork();
         if (pid == 0)
-        { // Child process for categories
+        { 
             process_category(&s->Categories[i], UserBuyBox, StoreSellBox, getpid(), pipe_fd, s->Name, username);
             exit(0);
         }
@@ -405,38 +404,38 @@ void process_store(struct store *s, struct buyBox UserBuyBox, struct sellBox *St
         }
     }
 }
-// void createSharedMemory(){
-//     const char * name = "shared_data";
-//     int shm_fd = shm_open(name, O_CREAT | O_RDWR, 0666);
-//     if (shm_fd == -1) {
-//         perror("shm_open");
-//         exit(EXIT_FAILURE);
-//     }
-//     // Configure the size of the shared memory
-//     size_t size = sizeof(struct shared_data);
-//     if (ftruncate(shm_fd, size) == -1) {
-//         perror("ftruncate");
-//         exit(EXIT_FAILURE);
-//     }
 
-//      // Map the shared memory object in the address space
-//     sh_data = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
-//     if (sh_data == MAP_FAILED) {
-//         perror("mmap");
-//         exit(EXIT_FAILURE);
-//     }
 
-//     // Initialize mutex and semaphore
-//     pthread_mutexattr_t attr;
-//     pthread_mutexattr_init(&attr);
-//     pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
-//     pthread_mutex_init(&sh_data->mutex, &attr);
-//     sem_init(&sh_data->sem, 1, 0); // Initialize semaphore for inter-process use
 
-//     // Initialize other fields
-//     sh_data->awake_signal = 0;
-//     sh_data->purchase_signal = 0;
-// }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 void log_purchase_history(const char *username, const char *store_name)
 {
     char history_filename[100];
@@ -461,22 +460,22 @@ int has_purchased_from_store(const char *username, const char *store_name)
     FILE *history_file = fopen(history_filename, "r");
     if (history_file == NULL)
     {
-        return 0; // If file doesn't exist, return false (user hasn't bought from any store yet)
+        return 0; 
     }
 
     char line[256];
     while (fgets(line, sizeof(line), history_file))
     {
-        line[strcspn(line, "\n")] = '\0'; // Remove the newline character
+        line[strcspn(line, "\n")] = '\0'; 
         if (strcmp(line, store_name) == 0)
         {
             fclose(history_file);
-            return 1; // User has purchased from this store before
+            return 1; 
         }
     }
 
     fclose(history_file);
-    return 0; // User hasn't purchased from this store
+    return 0; 
 }
 
 struct rating_params
@@ -491,12 +490,12 @@ void *update_product_score_thread(void *arg)
 {
     struct rating_params *params = (struct rating_params *)arg;
 
-    // Construct the file path
+    
     char file_path[512];
     snprintf(file_path, sizeof(file_path), "./Data_set/%s/%s/%d.txt",
              params->store_name, params->category_name, params->product_id);
 
-    // Open the file for reading and writing
+    
     FILE *file = fopen(file_path, "r+");
     if (file == NULL)
     {
@@ -508,7 +507,7 @@ void *update_product_score_thread(void *arg)
     char line[256];
     int score_found = 0;
 
-    // Read the product details
+    
     while (fgets(line, sizeof(line), file))
     {
         if (sscanf(line, "Name: %[^\n]", prod.Name) == 1)
@@ -533,13 +532,13 @@ void *update_product_score_thread(void *arg)
         return NULL;
     }
 
-    // Calculate the new score
+    
     prod.Score = (prod.Score + params->user_rating) / 2.0;
 
-    // Move the file pointer to the beginning for overwriting
+    
     rewind(file);
 
-    // Write updated product details back to the file
+    
     fprintf(file, "Name: %s\n", prod.Name);
     fprintf(file, "Price: %.2f\n", prod.Price);
     fprintf(file, "Score: %.1f\n", prod.Score);
@@ -549,7 +548,7 @@ void *update_product_score_thread(void *arg)
     printf("Updated Score for product '%s': %.1f\n", prod.Name, prod.Score);
 
     fclose(file);
-    free(params); // Free the allocated memory for parameters
+    free(params); 
     return NULL;
 }
 
@@ -568,25 +567,25 @@ void prompt_and_update_ratings_threaded(const struct sellBox *best_store, const 
     {
         struct product *prod = &best_store->products[i];
 
-        // Check if the product was purchased
+        
         for (int j = 0; j < user_orders->OrderCount; j++)
         {
             if (strcmp(prod->Name, user_orders->Orders[j].product_name) == 0)
             {
                 float user_rating = 0.0;
 
-                // Prompt the user for a rating
+                
                 printf("Rate the product '%s' (Price: %.2f, Store: %s): ", prod->Name, prod->Price, prod->StoreName);
                 scanf("%f", &user_rating);
 
                 if (user_rating < 1 || user_rating > 5)
                 {
                     printf("Invalid rating. Please enter a value between 1 and 5.\n");
-                    j--; // Re-prompt for this product
+                    j--; 
                     continue;
                 }
 
-                // Allocate memory for thread parameters
+                
                 struct rating_params *params = malloc(sizeof(struct rating_params));
                 if (!params)
                 {
@@ -594,13 +593,13 @@ void prompt_and_update_ratings_threaded(const struct sellBox *best_store, const 
                     continue;
                 }
 
-                // Populate parameters for the thread
+                
                 strcpy(params->store_name, prod->StoreName);
                 strcpy(params->category_name, prod->CategoryName);
                 params->product_id = prod->id;
                 params->user_rating = user_rating;
 
-                // Create a thread to update the rating
+                
                 if (pthread_create(&threads[i], NULL, update_product_score_thread, params) != 0)
                 {
                     perror("Failed to create thread for rating update");
@@ -612,7 +611,7 @@ void prompt_and_update_ratings_threaded(const struct sellBox *best_store, const 
         }
     }
 
-    // Wait for all threads to finish
+    
     for (int i = 0; i < best_store->ProductCount; i++)
     {
         pthread_join(threads[i], NULL);
@@ -622,18 +621,18 @@ void prompt_and_update_ratings_threaded(const struct sellBox *best_store, const 
 }
 int main()
 {
-    // Initialize logging
+    
     init_logging();
 
     char username[50];
     char ans[20];
     int order_count;
 
-    // Input: Username
+    
     printf("Username: ");
     scanf("%49s", username);
 
-    // Input: Number of Orders
+    
     printf("Enter number of orders: ");
     scanf("%d", &order_count);
 
@@ -662,7 +661,7 @@ int main()
 
     struct buyBox data = {orders, order_count};
 
-    // Create a pipe for each store
+    
     int pipe_fd[store_count][2];
     for (int i = 0; i < store_count; i++)
     {
@@ -685,16 +684,16 @@ int main()
             free(orders);
             exit(1);
         }
-        StoreSellBox_ptr->products = NULL; // Ensure products pointer is initialized
+        StoreSellBox_ptr->products = NULL; 
         StoreSellBox_ptr->ProductCount = 0;
 
         if (pid == 0)
-        { // Child process for store
+        { 
             process_store(&stores[i], data, StoreSellBox_ptr, getppid(), pipe_fd[i][1], username);
-            // Child does not print products, it writes them to the pipe
+            
             free(StoreSellBox_ptr->products);
             free(StoreSellBox_ptr);
-            exit(0); // Exit after processing the store
+            exit(0); 
         }
         else if (pid < 0)
         {
@@ -709,7 +708,7 @@ int main()
     {
         wait(NULL);
     }
-    // In main()
+    
     struct sellBox best_store = getBestBox(pipe_fd, store_count, price_threshold);
 
     if (best_store.ProductCount == 0)
@@ -718,47 +717,47 @@ int main()
     }
     else
     {
-        // Display all products from the best store
+        
         printf("\nBest store products:\n");
         float total_price = 0.0;
         float discount = 0.0;
 
-        // Iterate over all products in the best store and calculate total price
+        
         for (int i = 0; i < best_store.ProductCount; i++)
         {
             struct product *prod = &best_store.products[i];
 
-            // Display product details
+            
             printf("Product: %s, Price: %.2f, Score: %.1f, Store: %s\n",
                    prod->Name, prod->Price, prod->Score, prod->StoreName);
 
-            // Accumulate the total price for all products in the order list
+            
             total_price += (prod->Price * orders[i].quantity);
         }
 
-        // Ask if the user wants to buy from this store
+        
         printf("\nDo you want to buy from this store? Enter 'y' or 'n': ");
         char ans[2];
         scanf("%2s", ans);
 
         if (ans[0] == 'y')
         {
-            // Check if the user qualifies for a discount (repeat visit)
+            
             if (has_purchased_from_store(username, best_store.products->StoreName))
             {
-                discount = 0.05; // 5% discount for repeat customers
+                discount = 0.05; 
                 printf("You get a 5%% discount for re-entering this store!\n");
             }
 
-            // Apply the discount to the total price
+            
             float final_price = total_price * (1 - discount);
 
-            // Process each product in the order list
+            
             for (int i = 0; i < best_store.ProductCount; i++)
             {
                 struct product *prod = &best_store.products[i];
 
-                // Decrease inventory for the purchased product
+                
                 for (int j = 0; j < data.OrderCount; j++)
                 {
                     if (strcmp(prod->Name, data.Orders[j].product_name) == 0)
@@ -769,11 +768,11 @@ int main()
                     }
                 }
 
-                // Log the purchase to the history
+                
                 log_purchase_history(username, prod->StoreName);
             }
 
-            // Display the final total price after all purchases
+            
             printf("\nTotal Price after discount (if applicable): %.2f\n", final_price);
         }
         else
@@ -787,7 +786,7 @@ int main()
     free(orders);
     free(stores);
 
-    // Cleanup logging
+    
     cleanup_logging();
 
     return 0;
