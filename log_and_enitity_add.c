@@ -10,6 +10,7 @@
 #include <fcntl.h>   
 #include <semaphore.h>
 #include <time.h>
+#include <dirent.h>
 struct process_params {
     struct product* prod;
     char* storeName;
@@ -48,7 +49,6 @@ void write_log(const char* username, const char* message) {
     
     pthread_mutex_unlock(&log_mutex); // Unlock the mutex
 }
-
 
 // Initialize logging system
 void init_logging() {
@@ -164,56 +164,7 @@ float calculateScore(struct sellBox* box) {
     }
     return totalScore;
 }
-// Function to find the best sellBox dynamically
-/*struct sellBox getBestBox(int pipe_fd[][2], int store_count) {
-    struct sellBox userSellBox;
-    userSellBox.products = NULL;
-    userSellBox.ProductCount = 0;
 
-    float bestScore = -1.0;
-
-    // Iterate through each pipe to read sellBoxes
-    for (int i = 0; i < store_count; i++) {
-        close(pipe_fd[i][1]); // Close the write end in the parent
-
-        // Read product data dynamically into a sellBox
-        struct sellBox currentBox;
-        currentBox.ProductCount = 0;
-        currentBox.products = malloc(0); // Start with no products
-
-        struct product prod;
-        while (read(pipe_fd[i][0], &prod, sizeof(struct product)) > 0) {
-            
-            currentBox.ProductCount++;
-            currentBox.products = realloc(currentBox.products, currentBox.ProductCount * sizeof(struct product));
-            if (!currentBox.products) {
-                perror("Memory allocation failed");
-                exit(EXIT_FAILURE);
-            }
-            currentBox.products[currentBox.ProductCount - 1] = prod;
-        }
-        
-        close(pipe_fd[i][0]); // Close the read end after reading
-
-        // Calculate the score for this sellBox
-        float currentScore = calculateScore(&currentBox);
-        if (currentScore > bestScore) {
-            // Free the previous best sellBox's memory
-            if (userSellBox.products != NULL) {
-                free(userSellBox.products);
-            }
-
-            // Update the best sellBox
-            bestScore = currentScore;
-            userSellBox = currentBox;
-        } else {
-            // Free the memory for the current box if it's not the best
-            free(currentBox.products);
-        }
-    }
-
-    return userSellBox;
-}*/
 struct sellBox getBestBox(int pipe_fd[][2], int store_count, float price_threshold) {
     struct sellBox userSellBox;
     userSellBox.products = NULL;
@@ -373,6 +324,39 @@ void process_store(struct store *s, struct buyBox UserBuyBox, struct sellBox *St
 //     sh_data->awake_signal = 0;
 //     sh_data->purchase_signal = 0;
 // }
+void log_purchase_history(const char* username, const char* store_name) {
+    char history_filename[100];
+    snprintf(history_filename, sizeof(history_filename), "%s_purchase_history.txt", username);
+
+    FILE* history_file = fopen(history_filename, "a");
+    if (history_file != NULL) {
+        fprintf(history_file, "%s\n", store_name);
+        fclose(history_file);
+    } else {
+        perror("Error opening purchase history file");
+    }
+}
+int has_purchased_from_store(const char* username, const char* store_name) {
+    char history_filename[100];
+    snprintf(history_filename, sizeof(history_filename), "%s_purchase_history.txt", username);
+
+    FILE* history_file = fopen(history_filename, "r");
+    if (history_file == NULL) {
+        return 0;  // If file doesn't exist, return false (user hasn't bought from any store yet)
+    }
+
+    char line[256];
+    while (fgets(line, sizeof(line), history_file)) {
+        line[strcspn(line, "\n")] = '\0';  // Remove the newline character
+        if (strcmp(line, store_name) == 0) {
+            fclose(history_file);
+            return 1;  // User has purchased from this store before
+        }
+    }
+
+    fclose(history_file);
+    return 0;  // User hasn't purchased from this store
+}
 
 int main() {
     // Initialize logging
@@ -453,30 +437,6 @@ int main() {
     for (int i = 0; i < store_count; i++) {
         wait(NULL);
     }
-    /*struct sellBox best_store = getBestBox(pipe_fd, store_count);
-    printf("Best store products:\n");
-
-    for (int i = 0; i < best_store.ProductCount; i++) {
-        struct product* prod = &best_store.products[i];
-        printf(
-            "Product: %s, Price: %.2f, Score: %.1f, Store: %s\n",
-            prod->Name,
-            prod->Price,
-            prod->Score,
-            prod->StoreName
-        );
-
-        // Find the matching order to get the correct quantity
-        for (int j = 0; j < data.OrderCount; j++) {
-            if (strcmp(prod->Name, data.Orders[j].product_name) == 0) {
-                int requested_quantity = data.Orders[j].quantity;
-
-                // Decrease the correct quantity
-                decrease_entity_count(prod->StoreName, prod->CategoryName, prod->id, requested_quantity);
-                break;
-            }
-        }
-    }*/
     // In main()
     struct sellBox best_store = getBestBox(pipe_fd, store_count, price_threshold);
 
@@ -486,34 +446,69 @@ int main() {
         printf("\nBest store products:\n");
         float total_price = 0.0;
     
-        for (int i = 0; i < best_store.ProductCount; i++) {
-            struct product* prod = &best_store.products[i];
-            total_price += prod->Price;
-        
-            printf("Product: %s, Price: %.2f, Score: %.1f, Store: %s\n",
-                prod->Name, prod->Price, prod->Score, prod->StoreName);
-            printf("Do you want to buy from this store? enter 'y' or 'n' ");
-            scanf("%49s",&ans);
-        // Find matching order quantity and decrease inventory
-            if(ans[0] == 'y')
-            {
-                for (int j = 0; j < data.OrderCount; j++) {
+
+    // Loop through all products in the best store and display them
+    int is_return_visit = 0;  // Tracks if this is the user's second or subsequent entrance
+    //float total_price = 0.0;
+
+    // Check if the user has previously purchased from this store
+    if (has_purchased_from_store(username, best_store.products->StoreName)) {
+        is_return_visit = 1;  // User has entered this store before
+    }
+
+    // Iterate over all products in the best store
+    for (int i = 0; i < best_store.ProductCount; i++) {
+        struct product* prod = &best_store.products[i];
+
+    // Display product details
+        printf("Product: %s, Price: %.2f, Score: %.1f, Store: %s\n",
+               prod->Name, prod->Price, prod->Score, prod->StoreName);
+
+    // Ask the user if they want to buy this product
+        printf("Do you want to buy this product? Enter 'y' or 'n': ");
+        char ans[2];
+        scanf("%2s", ans);
+
+        if (ans[0] == 'y') {
+        // Check if the discount applies (only for second or more entrances)
+            float discount = 0.0;
+            if (is_return_visit) {
+                discount = 0.05;  // 5% discount for second or subsequent entrance
+                printf("You get a 5%% discount for re-entering this store!\n");
+            }
+
+        // Calculate the final price for the product
+            float final_price = prod->Price * (1 - discount);
+            total_price += final_price;
+
+        // Decrease inventory for the purchased product
+            for (int j = 0; j < data.OrderCount; j++) {
                 if (strcmp(prod->Name, data.Orders[j].product_name) == 0) {
                     decrease_entity_count(prod->StoreName, prod->CategoryName, 
-                        prod->id, data.Orders[j].quantity);
+                                          prod->id, data.Orders[j].quantity);
                     break;
                 }
             }
-            }
-            else if (ans[0] == 'n')
-            {
-                printf("buying is cancelled, see you for another order");
-                return 0;
-            }
-            
+
+        // Log the purchase to the history
+            log_purchase_history(username, prod->StoreName);
+
+        } else if (ans[0] == 'n') {
+            printf("You chose not to buy this product.\n");
         }
-    
+    }
+
+    // Display the total price after all purchases
+    if (total_price > 0) {
         printf("\nTotal Price: %.2f\n", total_price);
+    } else {
+        printf("No purchases were made. See you next time!\n");
+    }
+
+
+
+
+
     }
 
     free(orders);
