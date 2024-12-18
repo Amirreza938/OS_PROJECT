@@ -244,7 +244,7 @@ struct sellBox getBestBox(int pipe_fd[][2], int store_count, float price_thresho
         close(pipe_fd[i][0]);
 
         // Check if this store has all products and is within price threshold
-        if (totalPrices[i] <= price_threshold) {
+        if (totalPrices[i] <= price_threshold || price_threshold == -1) {
             validStoreCount++;
         }
     }
@@ -254,7 +254,7 @@ struct sellBox getBestBox(int pipe_fd[][2], int store_count, float price_thresho
     int bestStoreIndex = -1;
 
     for (int i = 0; i < store_count; i++) {
-        if (totalPrices[i] <= price_threshold) {
+        if (totalPrices[i] <= price_threshold || price_threshold == -1) {
             float currentScore = calculateScore(&allStoreBoxes[i]);
             if (currentScore > bestScore) {
                 bestScore = currentScore;
@@ -379,6 +379,7 @@ int main() {
     init_logging();
 
     char username[50];
+    char ans[20];
     int order_count;
 
     // Input: Username
@@ -401,7 +402,7 @@ int main() {
     }
 
     float price_threshold;
-    printf("Price threshold: ");
+    printf("Price threshold (if it is not important for you enter -1): ");
     scanf("%f", &price_threshold);
 
     printf("\n%s created PID: %d\n", username, getpid());
@@ -491,15 +492,25 @@ int main() {
         
             printf("Product: %s, Price: %.2f, Score: %.1f, Store: %s\n",
                 prod->Name, prod->Price, prod->Score, prod->StoreName);
-
+            printf("Do you want to buy from this store? enter 'y' or 'n' ");
+            scanf("%49s",&ans);
         // Find matching order quantity and decrease inventory
-            for (int j = 0; j < data.OrderCount; j++) {
+            if(ans[0] == 'y')
+            {
+                for (int j = 0; j < data.OrderCount; j++) {
                 if (strcmp(prod->Name, data.Orders[j].product_name) == 0) {
                     decrease_entity_count(prod->StoreName, prod->CategoryName, 
                         prod->id, data.Orders[j].quantity);
                     break;
                 }
             }
+            }
+            else if (ans[0] == 'n')
+            {
+                printf("buying is cancelled, see you for another order");
+                return 0;
+            }
+            
         }
     
         printf("\nTotal Price: %.2f\n", total_price);
