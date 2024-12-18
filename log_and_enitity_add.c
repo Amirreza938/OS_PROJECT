@@ -30,11 +30,11 @@ void get_current_time(char *buffer, size_t size)
 // Mutex for thread-safe logging
 pthread_mutex_t log_mutex;
 
-void write_log(const char *username, const char *message)
+void write_log(const char *username, const char *message , const char * storeName , const char * categoryName)
 {
     // Create the log file name based on the username
     char log_filename[100];
-    snprintf(log_filename, sizeof(log_filename), "%s_Order0.log", username);
+    snprintf(log_filename, sizeof(log_filename), "./Data_set/%s/%s/%s_Order0.log",storeName , categoryName, username);
 
     // Mutex for thread-safe logging
     pthread_mutex_lock(&log_mutex); // Lock the mutex for thread safety
@@ -158,7 +158,7 @@ void *process_product(void *arg)
     char log_message[512];
     snprintf(log_message, sizeof(log_message), "Thread started for file: ./Data_set/%s/%s/%d.txt",
              params->storeName, params->categoryName, prod->id);
-    write_log(username, log_message);
+    write_log(username, log_message,params->storeName,params->categoryName);
 
     for (int i = 0; i < params->buyBox.OrderCount; i++)
     {
@@ -169,7 +169,7 @@ void *process_product(void *arg)
                 // Log product found
                 snprintf(log_message, sizeof(log_message), "Thread found product: %s in store: %s, category: %s",
                          prod->Name, params->storeName, params->categoryName);
-                write_log(username, log_message);
+                write_log(username, log_message,params->storeName,params->categoryName);
 
                 // Write product details to the pipe
                 write(pipe_fd, prod, sizeof(struct product));
@@ -715,6 +715,7 @@ int main()
         else
         {
             printf("\nYou chose not to buy from this store. See you next time!\n");
+            return 0;
         }
         prompt_and_update_ratings_threaded(&best_store, &data);
     }
