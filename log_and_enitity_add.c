@@ -11,6 +11,7 @@
 #include <semaphore.h>
 #include <time.h>
 #include <dirent.h>
+#include <regex.h>
 struct process_params
 {
     struct product *prod;
@@ -21,6 +22,8 @@ struct process_params
     char *username;
 };
 
+int max_order = 0;
+
 void get_current_time(char *buffer, size_t size)
 {
     time_t now = time(NULL);
@@ -30,11 +33,61 @@ void get_current_time(char *buffer, size_t size)
 // Mutex for thread-safe logging
 pthread_mutex_t log_mutex;
 
+int get_max_order_number(const char *storeName, const char *categoryName, const char *username)
+{
+    char directory_path[200];
+    snprintf(directory_path, sizeof(directory_path), "./Data_set/%s/%s", storeName, categoryName);
+
+    DIR *dir = opendir(directory_path);
+    if (dir == NULL)
+    {
+        perror("Error opening directory");
+        return -1;
+    }
+
+    struct dirent *entry;
+    int max_order = -1;
+    char pattern[100];
+    snprintf(pattern, sizeof(pattern), "^%s_Order([0-9]+)\\.log$", username);
+
+    regex_t regex;
+    if (regcomp(&regex, pattern, REG_EXTENDED) != 0)
+    {
+        perror("Error compiling regex");
+        closedir(dir);
+        return -1;
+    }
+
+    while ((entry = readdir(dir)) != NULL)
+    {
+        regmatch_t match[2];
+        if (regexec(&regex, entry->d_name, 2, match, 0) == 0)
+        {
+            char order_number_str[10];
+            int length = match[1].rm_eo - match[1].rm_so;
+            strncpy(order_number_str, entry->d_name + match[1].rm_so, length);
+            order_number_str[length] = '\0';
+
+            int order_number = atoi(order_number_str);
+            if (order_number > max_order)
+            {
+                max_order = order_number;
+            }
+        }
+    }
+
+    regfree(&regex);
+    closedir(dir);
+
+    return max_order;
+}
+
 void write_log(const char *username, const char *message , const char * storeName , const char * categoryName)
 {
     // Create the log file name based on the username
     char log_filename[100];
-    snprintf(log_filename, sizeof(log_filename), "./Data_set/%s/%s/%s_Order0.log",storeName , categoryName, username);
+    
+    snprintf(log_filename, sizeof(log_filename), "./Data_set/%s/%s/%s_Order%d.log",storeName , categoryName, username,max_order);
 
     // Mutex for thread-safe logging
     pthread_mutex_lock(&log_mutex); // Lock the mutex for thread safety
@@ -271,6 +324,17 @@ struct sellBox getBestBox(int pipe_fd[][2], int store_count, float price_thresho
 // Function to process a category
 void process_category(struct category *cat, struct buyBox UserBuyBox, struct sellBox *StoreSellBox, int store_pid, int pipe_fd, char StoreName[256], const char *username)
 {
+
+    max_order = get_max_order_number(StoreName,cat->Name,username);
+    if (max_order < 0)
+    {
+        max_order = 0; // Default to 0 if no logs found
+    }
+    else
+    {
+        max_order++; // Increment for the new order
+    }
+
     printf("PID %d create child for category: %s PID: %d\n", store_pid, cat->Name, getpid());
 
     pthread_t *threads = malloc(cat->ProductCount * sizeof(pthread_t));
