@@ -15,6 +15,8 @@ struct product {
     int Entity;
     char LastModified[64];
     int id;
+    char StoreName[256];     // Store name associated with the product
+    char CategoryName[256];  // Category name associated with the product
 };
 
 struct category {
@@ -107,7 +109,7 @@ void get_directory_name(const char *dirpath, char *dest) {
 }
 
 // Function to traverse category directories
-struct category traverse_category(const char *dirpath) {
+/*struct category traverse_category(const char *dirpath) {
     struct category cat = {0};
     get_directory_name(dirpath, cat.Name);
 
@@ -137,10 +139,43 @@ struct category traverse_category(const char *dirpath) {
 
     closedir(dp);
     return cat;
+}*/
+struct category traverse_category(const char *dirpath) {
+    struct category cat = {0};
+    get_directory_name(dirpath, cat.Name);
+
+    struct dirent *entry;
+    DIR *dp = opendir(dirpath);
+    if (!dp) {
+        perror("Error opening category directory");
+        exit(EXIT_FAILURE);
+    }
+
+    while ((entry = readdir(dp)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+
+        char filepath[1024];
+        snprintf(filepath, sizeof(filepath), "%s/%s", dirpath, entry->d_name);
+
+        struct stat path_stat;
+        stat(filepath, &path_stat);
+
+        if (S_ISREG(path_stat.st_mode)) {
+            cat.Products = (struct product*)realloc(cat.Products, sizeof(struct product) * (cat.ProductCount + 1));
+            cat.Products[cat.ProductCount] = read_file(filepath);
+            strncpy(cat.Products[cat.ProductCount].CategoryName, cat.Name, sizeof(cat.Products[cat.ProductCount].CategoryName) - 1);
+            cat.ProductCount++;
+        }
+    }
+
+    closedir(dp);
+    return cat;
 }
 
+
 // Function to traverse store directories
-struct store traverse_store(const char *dirpath) {
+/*struct store traverse_store(const char *dirpath) {
     struct store s = {0};
     get_directory_name(dirpath, s.Name);
 
@@ -170,7 +205,44 @@ struct store traverse_store(const char *dirpath) {
 
     closedir(dp);
     return s;
+}*/
+struct store traverse_store(const char *dirpath) {
+    struct store s = {0};
+    get_directory_name(dirpath, s.Name);
+
+    struct dirent *entry;
+    DIR *dp = opendir(dirpath);
+    if (!dp) {
+        perror("Error opening store directory");
+        exit(EXIT_FAILURE);
+    }
+
+    while ((entry = readdir(dp)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+
+        char subdirpath[1024];
+        snprintf(subdirpath, sizeof(subdirpath), "%s/%s", dirpath, entry->d_name);
+
+        struct stat path_stat;
+        stat(subdirpath, &path_stat);
+
+        if (S_ISDIR(path_stat.st_mode)) {
+            s.Categories = (struct category*)realloc(s.Categories, sizeof(struct category) * (s.CategoryCount + 1));
+            s.Categories[s.CategoryCount] = traverse_category(subdirpath);
+
+            // Assign store name to all products in this category
+            for (int i = 0; i < s.Categories[s.CategoryCount].ProductCount; i++) {
+                strncpy(s.Categories[s.CategoryCount].Products[i].StoreName, s.Name, sizeof(s.Categories[s.CategoryCount].Products[i].StoreName) - 1);
+            }
+            s.CategoryCount++;
+        }
+    }
+
+    closedir(dp);
+    return s;
 }
+
 
 // Function to get all stores
 void get_stores(const char *root_path, struct store **stores, int *store_count) {
